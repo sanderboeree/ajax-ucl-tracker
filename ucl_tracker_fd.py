@@ -16,13 +16,64 @@ FD_API_TOKEN = os.getenv('FD_TOKEN')  # <- no default; set in Render env
 DEFAULT_PORT = int(os.getenv('PORT', '8088'))
 COMPETITION_CODE = 'CL'  # UEFA Champions League
 
+# --- Favicon (SVG) ---
+FAVICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <defs>
+    <style>
+      .bg { fill: #0a0a0a; }
+      .ring { fill: none; stroke: #D2122E; stroke-width: 6; }
+      .A { fill: #ffffff; font-family: Teko, Arial, sans-serif; font-weight: 700; font-size: 34px; }
+    </style>
+  </defs>
+  <rect class="bg" x="0" y="0" width="64" height="64" rx="12" ry="12"/>
+  <circle class="ring" cx="32" cy="32" r="22"/>
+  <text class="A" x="50%" y="54%" text-anchor="middle" dominant-baseline="middle">A</text>
+</svg>
+"""
+
+# We'll lazily create an ICO from the SVG on first request.
+# (Basic conversion by rasterizing with Pillow if available; else we serve the SVG as a fallback.)
+FAVICON_ICO_BYTES = None
+def _lazy_make_ico():
+    global FAVICON_ICO_BYTES
+    if FAVICON_ICO_BYTES is not None:
+        return FAVICON_ICO_BYTES
+    try:
+        # Attempt to rasterize with Pillow (usually available on Render)
+        from PIL import Image
+        import io, base64
+        # Convert SVG -> PNG via cairosvg if present; otherwise simple text-to-image fallback.
+        # To avoid optional deps, we’ll render a minimal PNG using Pillow drawing.
+        img = Image.new("RGBA", (64, 64), (10, 10, 10, 255))  # dark bg
+        from PIL import ImageDraw, ImageFont
+        d = ImageDraw.Draw(img)
+        # ring
+        d.ellipse((10, 10, 54, 54), outline=(210, 18, 46, 255), width=6)
+        # "A"
+        try:
+            font = ImageFont.truetype("DejaVuSans-Bold.ttf", 36)
+        except Exception:
+            font = ImageFont.load_default()
+        w, h = d.textsize("A", font=font)
+        d.text((32 - w/2, 32 - h/2 + 4), "A", fill=(255, 255, 255, 255), font=font)
+        # Save as ICO to bytes
+        buf = io.BytesIO()
+        img.save(buf, format="ICO")
+        FAVICON_ICO_BYTES = buf.getvalue()
+        return FAVICON_ICO_BYTES
+    except Exception:
+        # fallback: serve SVG bytes as ICO response (most browsers will still accept SVG via link rel icons)
+        return FAVICON_SVG.encode("utf-8")
+
 HTML_PAGE = """<!DOCTYPE html>
 <html lang='en'>
 <head>
   <meta charset='UTF-8' />
   <meta name='viewport' content='width=device-width, initial-scale=1.0' />
   <title>Ajax UCL Qualification Tracker - LIVE</title>
-  <link href='https://fonts.googleapis.com/css2?family=Teko:wght@300;400;500;600;700&family=Rajdhani:wght@300;400;500;600;700&display=swap' rel='stylesheet'>
+  /favicon.ico
+  /favicon.svg
+  https://fonts.googleapis.com/css2?family=Teko:wght@300;400;500;600;700&family=Rajdhani:wght@300;400;500;600;700&display=swap
   <style>
     :root{
       --ajax-red:#D2122E;--dark-bg:#0a0a0a;--dark-card:#1a1a1a;--grid-color:rgba(210,18,46,0.12);
@@ -80,7 +131,7 @@ HTML_PAGE = """<!DOCTYPE html>
     <header>
       <h1><span class='ajax-text'>AJAX</span> UCL TRACKER</h1>
       <p class='subtitle'>Live Champions League Qualification Monitor</p>
-      <div class='live-indicator'><div class='live-dot'></div><span id='liveStatus'>LIVE TRACKING ACTIVE</span></div>
+      <div class='live-indicator'><div class='live-dot'></div><span id='liveStatus'>LIVE DATA ACTIVE</span></div>
     </header>
 
     <div id='apiStatus' class='api-status connected'>Connected - Ready for live data</div>
@@ -122,7 +173,6 @@ HTML_PAGE = """<!DOCTYPE html>
   </div>
 
 <script>
-  // === Requirements ===
   const requirements = [
     { id:1, text:'Ajax MUST beat Olympiacos at home', checkFn: checkFixture('Ajax','Olympiacos') },
     { id:2, text:'Benfica must NOT beat Real Madrid', checkFn: checkNotWin('Benfica','Real Madrid') },
@@ -137,16 +187,14 @@ HTML_PAGE = """<!DOCTYPE html>
     return (matches)=>{
       const m = findMatch(matches, teamA, teamB);
       if(!m) return {status:'pending', score:'', time:''};
-      const st = m.status;  // IN_PLAY | PAUSED | FINISHED | ...
+      const st = m.status;
       const score = formatScore(m);
       const minute = m.minute != null ? String(m.minute) + "'" : '';
       if(st === 'FINISHED') {
         const ajaxWon = teamWon(m, 'Ajax');
         return {status: ajaxWon ? 'fulfilled':'failed', score:score, time:''};
       }
-      if(st === 'IN_PLAY' || st === 'PAUSED') {
-        return {status:'pending', score:score, time:minute};
-      }
+      if(st === 'IN_PLAY' || st === 'PAUSED') return {status:'pending', score:score, time:minute};
       return {status:'pending', score:'', time:''};
     };
   }
@@ -268,16 +316,14 @@ HTML_PAGE = """<!DOCTYPE html>
     return !!(el && el.checked);
   }
 
-  // === polling helpers ===
   let liveInterval = null;
-  const POLL_MS = 30000; // 30 seconds
+  const POLL_MS = 30000;
 
   function startLivePolling() {
     if (liveInterval) clearInterval(liveInterval);
     liveInterval = setInterval(async () => {
       try {
         let matches = [];
-
         if (isOnlyLiveMode()) {
           const liveRes = await fetch('/api/matches?mode=live');
           if (liveRes.ok) {
@@ -299,9 +345,7 @@ HTML_PAGE = """<!DOCTYPE html>
             }
           }
         }
-
         renderRequirements(matches);
-
         const now = new Date();
         document.getElementById('lastUpdated').textContent = 'Last updated: ' + now.toLocaleTimeString();
       } catch (err) {
@@ -319,24 +363,19 @@ HTML_PAGE = """<!DOCTYPE html>
   }
 
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      stopLivePolling();
-    } else {
-      startLivePolling();
-    }
+    if (document.hidden) stopLivePolling();
+    else startLivePolling();
   });
 
   async function fetchLiveData(){
     const btn=document.getElementById('refreshBtn');
     btn.disabled=true; btn.textContent='FETCHING...'; updateApiStatus('loading');
     try{
-      // 1) Standings
       const stRes = await fetch('/api/standings');
       if(!stRes.ok) throw new Error('Standings API error: ' + stRes.status);
       const stData = await stRes.json();
       renderStandings(stData);
 
-      // 2) Matches – respect only-live toggle
       let matches = [];
       if (isOnlyLiveMode()) {
         const liveRes = await fetch('/api/matches?mode=live');
@@ -357,16 +396,12 @@ HTML_PAGE = """<!DOCTYPE html>
           matches = normalizeFdMatches(fxData);
         }
       }
-
       renderRequirements(matches);
-
       const now = new Date();
       document.getElementById('lastUpdated').textContent = 'Last updated: ' + now.toLocaleTimeString();
       updateApiStatus('success', 'Live data updated at ' + now.toLocaleTimeString());
-
       stopLivePolling();
       startLivePolling();
-
     } catch (error) {
       console.error(error);
       updateApiStatus('error', 'Error: ' + error.message);
@@ -378,7 +413,7 @@ HTML_PAGE = """<!DOCTYPE html>
   function normalizeFdMatches(fd){
     if(!fd || !Array.isArray(fd.matches)) return [];
     return fd.matches.map(m=>{
-      const status = m.status; // SCHEDULED | IN_PLAY | PAUSED | FINISHED
+      const status = m.status;
       const homeTeam = m.homeTeam && m.homeTeam.name ? m.homeTeam.name : '';
       const awayTeam = m.awayTeam && m.awayTeam.name ? m.awayTeam.name : '';
       let hs = 0, as = 0;
@@ -393,7 +428,6 @@ HTML_PAGE = """<!DOCTYPE html>
     });
   }
 
-  // FIXED: proper load handler
   window.addEventListener('load', () => {
     const toggle = document.getElementById('onlyLiveToggle');
     if (toggle) {
@@ -413,7 +447,6 @@ class FDProxyHandler(BaseHTTPRequestHandler):
     def _write_common_headers(self, status: int, content_type: str):
         self.send_response(status)
         self.send_header('Content-Type', content_type)
-        # Small hygiene headers
         self.send_header('Cache-Control', 'no-store')
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.end_headers()
@@ -421,10 +454,19 @@ class FDProxyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
 
-        if parsed.path == '/favicon.ico':
-            self._write_common_headers(204, 'text/plain; charset=utf-8')
+        # --- Favicon routes ---
+        if parsed.path == '/favicon.svg':
+            self._write_common_headers(200, 'image/svg+xml; charset=utf-8')
+            self.wfile.write(FAVICON_SVG.encode('utf-8'))
             return
 
+        if parsed.path == '/favicon.ico':
+            ico = _lazy_make_ico()
+            self._write_common_headers(200, 'image/x-icon')
+            self.wfile.write(ico)
+            return
+
+        # Health & root
         if parsed.path == '/healthz':
             self._write_common_headers(200, 'text/plain; charset=utf-8')
             self.wfile.write(b'ok')
@@ -435,6 +477,7 @@ class FDProxyHandler(BaseHTTPRequestHandler):
             self.wfile.write(HTML_PAGE.encode('utf-8'))
             return
 
+        # API proxy
         if parsed.path == '/api/standings':
             return self.handle_standings()
 
