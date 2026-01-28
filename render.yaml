@@ -1,0 +1,13 @@
+
+services:
+  - type: web
+    name: ajax-ucl-tracker
+    env: python
+    plan: free
+    buildCommand: ""
+    startCommand: python ucl_tracker_fd.py
+    envVars:
+      - key: FD_TOKEN
+        sync: false   # set in dashboard
+      - key: PORT
+        value: 10000  # Render will override; your code reads PORT anyway
