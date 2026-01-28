@@ -1,7 +1,7 @@
 # ucl_tracker_fd.py
-# Single-file server + client for UEFA Champions League tracker using Football-Data.org API (FREE tier).
+# Single-file server + client for UEFA Champions League tracker using Football-Data.org API.
 # Default port: 8088
-# WARNING: Embedding API keys in client/server code is not recommended for production. You requested it explicitly.
+# NOTE: Do NOT hard-code secrets. Supply FD_TOKEN via environment.
 
 import os
 import sys
@@ -10,13 +10,13 @@ import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-# === Configure here ===
+# === Configuration ===
 FD_API_BASE = 'https://api.football-data.org/v4'
-FD_API_TOKEN = os.getenv('FD_TOKEN', '56788f5d0029469f8f9f221511b84fcb')  # user provided
+FD_API_TOKEN = os.getenv('FD_TOKEN')  # <- no default; set in Render env
 DEFAULT_PORT = int(os.getenv('PORT', '8088'))
 COMPETITION_CODE = 'CL'  # UEFA Champions League
 
-HTML_PAGE = r"""<!DOCTYPE html>
+HTML_PAGE = """<!DOCTYPE html>
 <html lang='en'>
 <head>
   <meta charset='UTF-8' />
@@ -104,7 +104,6 @@ HTML_PAGE = r"""<!DOCTYPE html>
     <div class='table-container'>
       <h2 class='section-title'>Champions League Standings (League Phase)</h2>
 
-      <!-- NEW: Only-live mode toggle -->
       <label style="display:flex;align-items:center;gap:8px;margin:4px 0 8px;">
         <input type="checkbox" id="onlyLiveToggle" />
         <span>Only show live matches (disable today fallback)</span>
@@ -264,13 +263,12 @@ HTML_PAGE = r"""<!DOCTYPE html>
     else {statusDiv.className='api-status connected';statusDiv.textContent='Fetching live data...';liveStatus.textContent='UPDATING...';}
   }
 
-  // === NEW: checkbox state accessor ===
   function isOnlyLiveMode() {
     const el = document.getElementById('onlyLiveToggle');
     return !!(el && el.checked);
   }
 
-  // === NEW: polling helpers ===
+  // === polling helpers ===
   let liveInterval = null;
   const POLL_MS = 30000; // 30 seconds
 
@@ -280,7 +278,6 @@ HTML_PAGE = r"""<!DOCTYPE html>
       try {
         let matches = [];
 
-        // Only-live: strictly live; else: live then fallback to today's window
         if (isOnlyLiveMode()) {
           const liveRes = await fetch('/api/matches?mode=live');
           if (liveRes.ok) {
@@ -321,7 +318,6 @@ HTML_PAGE = r"""<!DOCTYPE html>
     }
   }
 
-  // Pause polling in background tabs to save quota
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       stopLivePolling();
@@ -330,7 +326,6 @@ HTML_PAGE = r"""<!DOCTYPE html>
     }
   });
 
-  // UPDATED: fetchLiveData honors the checkbox
   async function fetchLiveData(){
     const btn=document.getElementById('refreshBtn');
     btn.disabled=true; btn.textContent='FETCHING...'; updateApiStatus('loading');
@@ -349,7 +344,6 @@ HTML_PAGE = r"""<!DOCTYPE html>
         const liveData = await liveRes.json();
         matches = normalizeFdMatches(liveData);
       } else {
-        // Live first, then today's window fallback
         const liveRes = await fetch('/api/matches?mode=live');
         if (liveRes.ok){
           const liveData = await liveRes.json();
@@ -370,7 +364,6 @@ HTML_PAGE = r"""<!DOCTYPE html>
       document.getElementById('lastUpdated').textContent = 'Last updated: ' + now.toLocaleTimeString();
       updateApiStatus('success', 'Live data updated at ' + now.toLocaleTimeString());
 
-      // restart the polling loop cleanly (respecting current toggle)
       stopLivePolling();
       startLivePolling();
 
@@ -388,7 +381,6 @@ HTML_PAGE = r"""<!DOCTYPE html>
       const status = m.status; // SCHEDULED | IN_PLAY | PAUSED | FINISHED
       const homeTeam = m.homeTeam && m.homeTeam.name ? m.homeTeam.name : '';
       const awayTeam = m.awayTeam && m.awayTeam.name ? m.awayTeam.name : '';
-      // Prefer fullTime, fallback to halfTime, else 0
       let hs = 0, as = 0;
       if (m.score) {
         if (m.score.fullTime && typeof m.score.fullTime.home === 'number') hs = m.score.fullTime.home;
@@ -401,8 +393,9 @@ HTML_PAGE = r"""<!DOCTYPE html>
     });
   }
 
-  // initial load & toggle listener
-  window.addEventListener('load', document.getElementById('onlyLiveToggle');
+  // FIXED: proper load handler
+  window.addEventListener('load', () => {
+    const toggle = document.getElementById('onlyLiveToggle');
     if (toggle) {
       toggle.addEventListener('change', () => {
         stopLivePolling();
@@ -417,46 +410,62 @@ HTML_PAGE = r"""<!DOCTYPE html>
 """
 
 class FDProxyHandler(BaseHTTPRequestHandler):
+    def _write_common_headers(self, status: int, content_type: str):
+        self.send_response(status)
+        self.send_header('Content-Type', content_type)
+        # Small hygiene headers
+        self.send_header('Cache-Control', 'no-store')
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.end_headers()
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
+
+        if parsed.path == '/favicon.ico':
+            self._write_common_headers(204, 'text/plain; charset=utf-8')
+            return
+
+        if parsed.path == '/healthz':
+            self._write_common_headers(200, 'text/plain; charset=utf-8')
+            self.wfile.write(b'ok')
+            return
+
         if parsed.path == '/':
-            self.send_response(200)
-            self.send_header('Content-Type', 'text/html; charset=utf-8')
-            self.end_headers()
+            self._write_common_headers(200, 'text/html; charset=utf-8')
             self.wfile.write(HTML_PAGE.encode('utf-8'))
             return
+
         if parsed.path == '/api/standings':
             return self.handle_standings()
+
         if parsed.path == '/api/matches':
             return self.handle_matches(parsed.query)
-        self.send_response(404)
-        self.send_header('Content-Type','text/plain')
-        self.end_headers()
+
+        self._write_common_headers(404, 'text/plain; charset=utf-8')
         self.wfile.write(b'Not found')
 
     def log_message(self, fmt, *args):
         sys.stderr.write("%s - - [%s] %s\n" % (self.client_address[0], self.log_date_time_string(), fmt % args))
 
     def _fd_request(self, url):
+        if not FD_API_TOKEN:
+            self._write_common_headers(500, 'application/json')
+            self.wfile.write(b'{"error":"Server not configured: missing FD_TOKEN"}')
+            return
+
         headers = {'X-Auth-Token': FD_API_TOKEN}
         req = urllib.request.Request(url, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=20) as resp:
                 data = resp.read()
                 status = resp.getcode()
-                self.send_response(status)
-                self.send_header('Content-Type','application/json')
-                self.end_headers()
+                self._write_common_headers(status, 'application/json')
                 self.wfile.write(data)
         except urllib.error.HTTPError as e:
-            self.send_response(e.code)
-            self.send_header('Content-Type','application/json')
-            self.end_headers()
+            self._write_common_headers(e.code, 'application/json')
             self.wfile.write(e.read() or b'{}')
         except Exception as e:
-            self.send_response(502)
-            self.send_header('Content-Type','application/json')
-            self.end_headers()
+            self._write_common_headers(502, 'application/json')
             msg = {"error":"Bad Gateway","detail":str(e)}
             self.wfile.write(str(msg).replace("'", "\"").encode('utf-8'))
 
@@ -470,10 +479,8 @@ class FDProxyHandler(BaseHTTPRequestHandler):
         date_from = qs.get('dateFrom',[None])[0]
         date_to = qs.get('dateTo',[None])[0]
         if mode == 'live':
-            # live matches for CL only
             url = f"{FD_API_BASE}/competitions/{COMPETITION_CODE}/matches?status=IN_PLAY,PAUSED"
         else:
-            # date window (e.g., today)
             params = {}
             if date_from: params['dateFrom'] = date_from
             if date_to: params['dateTo'] = date_to
@@ -484,7 +491,7 @@ class FDProxyHandler(BaseHTTPRequestHandler):
 def run_server(port: int):
     server_address = ('', port)
     httpd = ThreadingHTTPServer(server_address, FDProxyHandler)
-    print(f"Ajax UCL Tracker (Football-Data.org) on http://localhost:{port}")
+    print(f"Ajax UCL Tracker (Football-Data.org) on http://0.0.0.0:{port}")
     print("Press Ctrl+C to stop.")
     try:
         httpd.serve_forever()
@@ -497,6 +504,6 @@ if __name__ == '__main__':
     parser.add_argument('--port', type=int, default=DEFAULT_PORT)
     args = parser.parse_args()
     if not FD_API_TOKEN:
-        print('ERROR: Missing Football-Data.org token. Set env FD_TOKEN or edit FD_API_TOKEN constant.')
+        print('ERROR: Missing Football-Data.org token. Set env FD_TOKEN.')
         sys.exit(1)
     run_server(args.port)
