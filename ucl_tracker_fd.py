@@ -71,9 +71,12 @@ HTML_PAGE = """<!DOCTYPE html>
   <meta charset='UTF-8' />
   <meta name='viewport' content='width=device-width, initial-scale=1.0' />
   <title>Ajax UCL Qualification Tracker - LIVE</title>
-  /favicon.ico
-  /favicon.svg
-  https://fonts.googleapis.com/css2?family=Teko:wght@300;400;500;600;700&family=Rajdhani:wght@300;400;500;600;700&display=swap
+
+  <!-- Favicons & Fonts -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <link href="https://fonts.googleapis.com/css2?family=Teko:wght@300;400;500;600;700&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
   <style>
     :root{
       --ajax-red:#D2122E;--dark-bg:#0a0a0a;--dark-card:#1a1a1a;--grid-color:rgba(210,18,46,0.12);
@@ -81,49 +84,78 @@ HTML_PAGE = """<!DOCTYPE html>
     }
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:'Rajdhani',sans-serif;background:var(--dark-bg);color:var(--text-primary)}
-    body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(var(--grid-color) 1px,transparent 1px),linear-gradient(90deg,var(--grid-color) 1px,transparent 1px);background-size:50px 50px;animation:gridMove 20s linear infinite;pointer-events:none;z-index:0}
+    body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(var(--grid-color) 1px,transparent 1px),linear-gradient(90deg,var(--grid-color) 1px,transparent 1px);background-size:50px 50px;animation:gridMove 20s linear infinite;pointer-events:none;z-index:0;will-change:transform}
     @keyframes gridMove{0%{transform:translate(0,0)}100%{transform:translate(50px,50px)}}
     .container{max-width:1200px;margin:0 auto;padding:24px;position:relative;z-index:1}
     header{text-align:center;padding:36px 0;border-bottom:3px solid var(--ajax-red);margin-bottom:28px;position:relative}
-    h1{font-family:'Teko',sans-serif;font-size:clamp(2.6rem,8vw,4.8rem);font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px}
+    h1{font-family:'Teko',sans-serif;font-size:clamp(2.2rem,9vw,4.8rem);font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px}
     .ajax-text{color:var(--ajax-red);text-shadow:0 0 24px rgba(210,18,46,.65)}
     .subtitle{font-size:1.05rem;color:var(--text-secondary)}
     .live-indicator{display:inline-flex;align-items:center;gap:8px;background:var(--dark-card);padding:8px 14px;border-radius:18px;margin-top:12px;border:1px solid var(--ajax-red)}
     .live-dot{width:10px;height:10px;background:var(--ajax-red);border-radius:50%}
-    .status-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin:28px 0}
+
+    .status-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin:28px 0}
     .status-card{background:var(--dark-card);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:20px}
     .card-label{font-size:.85rem;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
-    .card-value{font-family:'Teko',sans-serif;font-size:2.2rem;font-weight:700}
+    .card-value{font-family:'Teko',sans-serif;font-size:clamp(1.6rem,6vw,2.3rem);font-weight:700}
+
     .requirements-section,.table-container{background:var(--dark-card);border-radius:12px;padding:24px;margin-bottom:24px;border:1px solid rgba(255,255,255,.08)}
-    .section-title{font-family:'Teko',sans-serif;font-size:1.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;color:var(--ajax-red)}
+    .section-title{font-family:'Teko',sans-serif;font-size:clamp(1.3rem,6vw,1.7rem);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;color:var(--ajax-red)}
     .requirements-counter{font-size:2.4rem;font-family:'Teko',sans-serif;font-weight:700;text-align:center;margin:14px 0;color:var(--ajax-red)}
     .counter-label{font-size:.95rem;color:var(--text-secondary);text-align:center;margin-bottom:20px}
-    .requirement-item{background:rgba(255,255,255,.03);border-left:4px solid var(--neutral);padding:12px 16px;margin-bottom:10px;border-radius:6px;display:flex;justify-content:space-between;align-items:center}
+
+    .requirement-item{background:rgba(255,255,255,.03);border-left:4px solid var(--neutral);padding:12px 16px;margin-bottom:10px;border-radius:6px;display:flex;justify-content:space-between;align-items:center;gap:6px}
     .requirement-item.fulfilled{border-left-color:var(--success);background:rgba(0,255,136,.05)}
     .requirement-item.failed{border-left-color:var(--danger);background:rgba(255,51,51,.05)}
     .requirement-item.pending{border-left-color:var(--warning)}
     .requirement-text{font-size:1rem;font-weight:500;flex:1}
     .requirement-score{font-size:1.05rem;font-weight:700;margin:0 12px;min-width:100px;text-align:center}
+
     .match-time{font-size:.88rem;color:var(--warning);margin-left:8px}
     .status-badge{padding:4px 10px;border-radius:12px;font-size:.82rem;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
     .status-badge.success{background:var(--success);color:#000}
     .status-badge.danger{background:var(--danger);color:#fff}
     .status-badge.pending{background:var(--warning);color:#000}
-    table{width:100%;border-collapse:collapse}
+
+    /* Table: ensure scroll on small screens */
+    .table-container{overflow-x:auto;-webkit-overflow-scrolling:touch}
+    table{width:100%;border-collapse:collapse;min-width:600px}
     thead{border-bottom:2px solid var(--ajax-red)}
     th{font-family:'Teko',sans-serif;font-size:1.1rem;font-weight:600;text-transform:uppercase;letter-spacing:1px;padding:10px 8px;text-align:left}
     td{padding:10px 8px;font-size:.98rem}
     tbody tr{border-bottom:1px solid rgba(255,255,255,.05)}
     tbody tr.ajax-row{background:rgba(210,18,46,.15);border:1px solid var(--ajax-red)}
     tbody tr.qualification-line{border-bottom:3px solid var(--success)}
-    .refresh-btn{background:var(--ajax-red);color:#fff;border:none;padding:12px 20px;font-family:'Teko',sans-serif;font-size:1.1rem;font-weight:600;text-transform:uppercase;letter-spacing:1px;border-radius:6px;cursor:pointer;margin:16px 0}
+
+    .refresh-btn{background:var(--ajax-red);color:#fff;border:none;padding:12px 20px;font-family:'Teko',sans-serif;font-size:1.2rem;font-weight:600;text-transform:uppercase;letter-spacing:1px;border-radius:6px;cursor:pointer;margin:16px 0;min-height:48px}
     .refresh-btn:disabled{opacity:.6;cursor:not-allowed}
+
     .last-updated{text-align:center;color:var(--text-secondary);font-size:.9rem;margin-top:8px}
     .api-status{text-align:center;padding:10px;margin:12px 0;border-radius:8px;font-weight:600}
     .api-status.connected{background:rgba(0,255,136,.1);border:1px solid var(--success);color:var(--success)}
     .api-status.error{background:rgba(255,51,51,.1);border:1px solid var(--danger);color:var(--danger)}
+
     .probability-bar{width:100%;height:8px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden;margin-top:8px}
     .probability-fill{height:100%;background:linear-gradient(90deg,var(--danger),var(--warning),var(--success));transition:width .6s ease;border-radius:4px}
+
+    /* Mobile tweaks */
+    @media (max-width: 600px) {
+      .container { padding:16px; }
+      header { padding:24px 0; }
+      .requirements-section,
+      .table-container { padding:18px; }
+
+      /* Stack requirement row content for narrow screens */
+      .requirement-item {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .requirement-score {
+        margin:4px 0 0 0;
+        min-width:auto;
+        text-align:left;
+      }
+    }
   </style>
 </head>
 <body>
