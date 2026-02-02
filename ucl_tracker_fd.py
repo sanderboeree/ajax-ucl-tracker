@@ -369,8 +369,12 @@ HTML_PAGE = """<!DOCTYPE html>
             matches = normalizeFdMatches(liveData);
           }
           if (matches.length === 0) {
-            const today = new Date().toISOString().split('T')[0];
-            const fxRes = await fetch('/api/matches?dateFrom=' + today + '&dateTo=' + today);
+            const todayDt = new Date();
+            const yesterdayDt = new Date(todayDt);
+            yesterdayDt.setDate(todayDt.getDate() - 1);
+            const today = todayDt.toISOString().split('T')[0];
+            const yesterday = yesterdayDt.toISOString().split('T')[0];
+            const fxRes = await fetch('/api/matches?dateFrom=' + yesterday + '&dateTo=' + today);
             if (fxRes.ok) {
               const fxData = await fxRes.json();
               matches = normalizeFdMatches(fxData);
@@ -421,9 +425,13 @@ HTML_PAGE = """<!DOCTYPE html>
           matches = normalizeFdMatches(liveData);
         }
         if (matches.length === 0){
-          const today = new Date().toISOString().split('T')[0];
-          const fxRes = await fetch('/api/matches?dateFrom='+today+'&dateTo='+today);
-          if(!fxRes.ok) throw new Error('Matches API error (today): ' + fxRes.status);
+          const todayDt = new Date();
+          const yesterdayDt = new Date(todayDt);
+          yesterdayDt.setDate(todayDt.getDate() - 1);
+          const today = todayDt.toISOString().split('T')[0];
+          const yesterday = yesterdayDt.toISOString().split('T')[0];
+          const fxRes = await fetch('/api/matches?dateFrom='+yesterday+'&dateTo='+today);
+          if(!fxRes.ok) throw new Error('Matches API error (recent days): ' + fxRes.status);
           const fxData = await fxRes.json();
           matches = normalizeFdMatches(fxData);
         }
