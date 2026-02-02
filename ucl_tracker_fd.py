@@ -105,7 +105,7 @@ HTML_PAGE = """<!DOCTYPE html>
     .counter-label{font-size:.95rem;color:var(--text-secondary);text-align:center;margin-bottom:20px}
 
     .requirement-item{background:rgba(255,255,255,.03);border-left:4px solid var(--neutral);padding:12px 16px;margin-bottom:10px;border-radius:6px;display:flex;justify-content:space-between;align-items:center;gap:6px}
-    .requirement-item.fulfilled{border-left-color:var(--success);background:rgba(0,255,136,.05)}
+    .requirement-item.success{border-left-color:var(--success);background:rgba(0,255,136,.05)}
     .requirement-item.failed{border-left-color:var(--danger);background:rgba(255,51,51,.05)}
     .requirement-item.pending{border-left-color:var(--warning)}
     .requirement-text{font-size:1rem;font-weight:500;flex:1}
@@ -224,7 +224,7 @@ HTML_PAGE = """<!DOCTYPE html>
       const minute = m.minute != null ? String(m.minute) + "'" : '';
       if(st === 'FINISHED') {
         const ajaxWon = teamWon(m, 'Ajax');
-        return {status: ajaxWon ? 'fulfilled':'failed', score:score, time:''};
+        return {status: ajaxWon ? 'success':'failed', score:score, time:''};
       }
       if(st === 'IN_PLAY' || st === 'PAUSED') return {status:'pending', score:score, time:minute};
       return {status:'pending', score:'', time:''};
@@ -239,7 +239,7 @@ HTML_PAGE = """<!DOCTYPE html>
       const score = formatScore(m);
       const minute = m.minute != null ? String(m.minute) + "'" : '';
       const aWon = teamWon(m, teamA);
-      if(st === 'FINISHED') return {status: aWon ? 'failed':'fulfilled', score:score, time:''};
+      if(st === 'FINISHED') return {status: aWon ? 'failed':'success', score:score, time:''};
       if(st === 'IN_PLAY' || st === 'PAUSED') return {status:'pending', score:score, time:minute};
       return {status:'pending', score:'', time:''};
     };
@@ -276,9 +276,9 @@ HTML_PAGE = """<!DOCTYPE html>
       const r = req.checkFn(matches);
       const item = document.createElement('div');
       item.className = 'requirement-item ' + r.status;
-      if(r.status==='fulfilled') fulfilled++;
-      let badge = r.status==='fulfilled' ? '<span class="status-badge success">MET</span>' :
-                  (r.status==='failed' ? '<span class="status-badge danger">FAILED</span>' :
+      if(r.status==='success') fulfilled++;
+      let badge = r.status==='success' ? '<span class="status-badge success">Success</span>' :
+                  (r.status==='failed' ? '<span class="status-badge danger">Failed</span>' :
                                          '<span class="status-badge pending">PENDING</span>');
       const scoreDisplay = r.score ? ('<div class="requirement-score">'+ r.score + (r.time ? ('<span class="match-time">'+ r.time +'</span>'):'') +'</div>') : '';
       item.innerHTML = '<div class="requirement-text">'+ req.text +'</div>'+ scoreDisplay +'<div class="requirement-status">'+ badge +'</div>';
